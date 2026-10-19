@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<title>لوحة تحكم تجار نجيب سليم</title>
+<link rel="icon" href="logo.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <div class="wrap">
+    <span class="logo-plate"><img src="logo.png" alt="نجيب سليم للأقمشة وأكثر"></span>
+    <button class="btn ghost sm" type="button" id="logout" hidden>تسجيل خروج</button>
+  </div>
+</header>
+<div class="weave" aria-hidden="true"></div>
+
+<main>
+<!-- login -->
+<section id="view-login">
+  <div class="wrap">
+    <form class="reg card" id="login" novalidate style="margin-top:48px">
+      <div>
+        <div class="eyebrow">لوحة التحكم</div>
+        <h1 style="font-size:28px;margin:4px 0 0">تسجيل دخول الأدمن</h1>
+      </div>
+      <div class="field">
+        <label for="email">الإيميل</label>
+        <input id="email" type="email" autocomplete="username" dir="ltr" style="text-align:left">
+      </div>
+      <div class="field">
+        <label for="pass">كلمة السر</label>
+        <input id="pass" type="password" autocomplete="current-password" dir="ltr" style="text-align:left">
+      </div>
+      <div class="notice err" id="login-err" hidden></div>
+      <button class="btn" type="submit" id="login-btn">دخول</button>
+    </form>
+  </div>
+</section>
+
+<!-- dashboard -->
+<section id="view-dash" hidden>
+  <div class="wrap dash">
+    <div class="dash-head">
+      <div>
+        <div class="eyebrow">لوحة التحكم</div>
+        <h2>التجار المسجّلين</h2>
+      </div>
+      <div class="tools">
+        <button class="btn ghost sm" type="button" id="refresh">تحديث</button>
+        <button class="btn sm" type="button" id="csv">تصدير Excel (CSV)</button>
+      </div>
+    </div>
+    <div class="stats">
+      <div class="stat card"><div class="k">إجمالي التسجيلات</div><div class="v" id="s-total">٠</div></div>
+      <div class="stat card"><div class="k">تسجيلات اليوم</div><div class="v" id="s-today">٠</div></div>
+      <div class="stat card"><div class="k">أكثر محافظة</div><div class="v small" id="s-top">—</div></div>
+    </div>
+    <div class="tools">
+      <input id="q" type="search" placeholder="ابحث بالاسم أو المحل أو الرقم">
+      <select id="fgov"><option value="">كل المحافظات</option></select>
+    </div>
+    <div class="notice err" id="dash-err" hidden></div>
+    <div class="card table-wrap">
+      <table>
+        <thead><tr><th>#</th><th>اسم التاجر</th><th>رقم الهاتف</th><th>المحافظة</th><th>اسم المحل</th><th>وقت التسجيل</th><th>إجراءات</th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+      <div class="empty" id="empty"><strong>لسه مفيش تسجيلات</strong>أول ما تاجر يملأ النموذج هيظهر هنا.</div>
+    </div>
+  </div>
+</section>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<script>
+(function(){
+const C=window.NS_CONFIG;
+const GOVS=["القاهرة","الجيزة","الإسكندرية","القليوبية","الدقهلية","الشرقية","الغربية","المنوفية","البحيرة","كفر الشيخ","دمياط","بورسعيد","الإسماعيلية","السويس","الفيوم","بني سويف","المنيا","أسيوط","سوهاج","قنا","الأقصر","أسوان","البحر الأحمر","الوادي الجديد","مطروح","شمال سيناء","جنوب سيناء"];
+const $=id=>document.getElementById(id);
+GOVS.forEach(g=>$("fgov").add(new Option(g,g)));
+const sb=window.supabase.createClient(C.SUPABASE_URL,C.SUPABASE_ANON_KEY);
+const toW=s=>s.replace(/[٠-٩]/g,d=>"٠١٢٣٤٥٦٧٨٩".indexOf(d));
+const fmt=new Intl.DateTimeFormat("ar-EG",{day:"numeric",month:"short",year:"numeric",hour:"numeric",minute:"2-digit"});
+let all=[],pendingDel=null,channel=null;
+
+/* ---- auth ---- */
+$("login").addEventListener("submit",async e=>{
+  e.preventDefault();$("login-err").hidden=true;
+  const btn=$("login-btn");btn.disabled=true;btn.textContent="جاري الدخول…";
+  const {error}=await sb.auth.signInWithPassword({email:$("email").value.trim(),password:$("pass").value});
+  btn.disabled=false;btn.textContent="دخول";
+  if(error){$("login-err").textContent="الإيميل أو كلمة السر غلط.";$("login-err").hidden=false;}
+});
+$("logout").onclick=()=>sb.auth.signOut();
+sb.auth.onAuthStateChange((_ev,session)=>{session?enter():leave();});
+
+function leave(){
+  $("view-login").hidden=false;$("view-dash").hidden=true;$("logout").hidden=true;
+  all=[];if(channel){sb.removeChannel(channel);channel=null;}
+}
+async function enter(){
+  $("view-login").hidden=true;$("view-dash").hidden=false;$("logout").hidden=false;
+  await load();
+  if(!channel){
+    channel=sb.channel("merchants-live")
+      .on("postgres_changes",{event:"*",schema:"public",table:"merchants"},()=>load())
+      .subscribe();
+  }
+}
+
+/* ---- data ---- */
+async function load(){
+  $("dash-err").hidden=true;
+  const {data,error}=await sb.from("merchants").select("*").order("created_at",{ascending:false}).limit(5000);
+  if(error){$("dash-err").textContent="تعذّر تحميل البيانات. جرّبي تحديث الصفحة.";$("dash-err").hidden=false;return;}
+  all=data||[];
+  if(!all.length){
+    // signed in but not in admins list → RLS returns nothing
+    const {data:isAdm}=await sb.rpc("is_admin");
+    if(isAdm===false){$("dash-err").textContent="الحساب ده مش مضاف كأدمن. ضيفي الإيميل في جدول admins.";$("dash-err").hidden=false;}
+  }
+  render();
+}
+$("refresh").onclick=load;
+
+function render(){
+  const q=toW($("q").value.trim()).toLowerCase(),g=$("fgov").value;
+  const list=all.filter(r=>(!g||r.governorate===g)&&(!q||[r.name,r.shop_name,r.phone].some(x=>(x||"").toLowerCase().includes(q))));
+  const today=new Date().toDateString();
+  $("s-total").textContent=all.length.toLocaleString("ar-EG");
+  $("s-today").textContent=all.filter(r=>new Date(r.created_at).toDateString()===today).length.toLocaleString("ar-EG");
+  const cnt={};all.forEach(r=>cnt[r.governorate]=(cnt[r.governorate]||0)+1);
+  const top=Object.entries(cnt).sort((a,b)=>b[1]-a[1])[0];
+  $("s-top").textContent=top?top[0]+" ("+top[1].toLocaleString("ar-EG")+")":"—";
+  const tb=$("rows");tb.textContent="";
+  $("empty").hidden=list.length>0;
+  $("empty").innerHTML=all.length?"<strong>مفيش نتائج</strong>جرّبي كلمة بحث أو محافظة تانية.":"<strong>لسه مفيش تسجيلات</strong>أول ما تاجر يملأ النموذج هيظهر هنا.";
+  list.forEach((r,i)=>{
+    const tr=document.createElement("tr");
+    const add=(text,cls)=>{const td=document.createElement("td");if(cls)td.className=cls;td.textContent=text;tr.appendChild(td);return td;};
+    add(String(i+1));add(r.name);add(r.phone,"ph");
+    const gtd=document.createElement("td");const s=document.createElement("span");s.className="gov";s.textContent=r.governorate;gtd.appendChild(s);tr.appendChild(gtd);
+    add(r.shop_name);add(fmt.format(new Date(r.created_at)),"when");
+    const td=document.createElement("td");const box=document.createElement("div");box.className="row-act";
+    const wa=document.createElement("a");wa.className="icon-btn";wa.target="_blank";wa.rel="noopener";wa.href="https://wa.me/2"+r.phone;wa.textContent="واتساب";
+    const del=document.createElement("button");del.type="button";
+    const confirming=pendingDel===r.id;
+    del.className="icon-btn del"+(confirming?" confirm":"");del.textContent=confirming?"تأكيد الحذف":"حذف";
+    del.onclick=async()=>{
+      if(pendingDel!==r.id){pendingDel=r.id;render();return;}
+      pendingDel=null;
+      const {error}=await sb.from("merchants").delete().eq("id",r.id);
+      if(error){$("dash-err").textContent="مقدرناش نحذف التسجيل.";$("dash-err").hidden=false;}
+      await load();
+    };
+    box.append(wa,del);td.appendChild(box);tr.appendChild(td);tb.appendChild(tr);
+  });
+}
+$("q").addEventListener("input",render);$("fgov").addEventListener("change",render);
+
+$("csv").onclick=()=>{
+  const esc=v=>'"'+String(v??"").replace(/"/g,'""')+'"';
+  const lines=[["اسم التاجر","رقم الهاتف","المحافظة","اسم المحل","وقت التسجيل"].map(esc).join(",")]
+    .concat(all.map(r=>[r.name,"'"+r.phone,r.governorate,r.shop_name,fmt.format(new Date(r.created_at))].map(esc).join(",")));
+  const url=URL.createObjectURL(new Blob(["﻿"+lines.join("\n")],{type:"text/csv;charset=utf-8"}));
+  const a=document.createElement("a");a.href=url;a.download="naguib-selim-merchants-"+new Date().toISOString().slice(0,10)+".csv";
+  document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
+};
+})();
+</script>
+</body>
+</html>
