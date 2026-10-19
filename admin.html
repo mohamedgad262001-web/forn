@@ -12,36 +12,13 @@
 <header class="top">
   <div class="wrap">
     <span class="logo-plate"><img src="logo.png" alt="نجيب سليم للأقمشة وأكثر"></span>
-    <button class="btn ghost sm" type="button" id="logout" hidden>تسجيل خروج</button>
   </div>
 </header>
 <div class="weave" aria-hidden="true"></div>
 
 <main>
-<!-- login -->
-<section id="view-login">
-  <div class="wrap">
-    <form class="reg card" id="login" novalidate style="margin-top:48px">
-      <div>
-        <div class="eyebrow">لوحة التحكم</div>
-        <h1 style="font-size:28px;margin:4px 0 0">تسجيل دخول الأدمن</h1>
-      </div>
-      <div class="field">
-        <label for="email">الإيميل</label>
-        <input id="email" type="email" autocomplete="username" dir="ltr" style="text-align:left">
-      </div>
-      <div class="field">
-        <label for="pass">كلمة السر</label>
-        <input id="pass" type="password" autocomplete="current-password" dir="ltr" style="text-align:left">
-      </div>
-      <div class="notice err" id="login-err" hidden></div>
-      <button class="btn" type="submit" id="login-btn">دخول</button>
-    </form>
-  </div>
-</section>
-
 <!-- dashboard -->
-<section id="view-dash" hidden>
+<section id="view-dash">
   <div class="wrap dash">
     <div class="dash-head">
       <div>
@@ -82,50 +59,24 @@ const C=window.NS_CONFIG;
 const GOVS=["القاهرة","الجيزة","الإسكندرية","القليوبية","الدقهلية","الشرقية","الغربية","المنوفية","البحيرة","كفر الشيخ","دمياط","بورسعيد","الإسماعيلية","السويس","الفيوم","بني سويف","المنيا","أسيوط","سوهاج","قنا","الأقصر","أسوان","البحر الأحمر","الوادي الجديد","مطروح","شمال سيناء","جنوب سيناء"];
 const $=id=>document.getElementById(id);
 GOVS.forEach(g=>$("fgov").add(new Option(g,g)));
-const sb=window.supabase.createClient(C.SUPABASE_URL,C.SUPABASE_ANON_KEY);
+const sb=window.supabase.createClient(C.SUPABASE_URL,C.SUPABASE_ANON_KEY,{auth:{persistSession:false}});
 const toW=s=>s.replace(/[٠-٩]/g,d=>"٠١٢٣٤٥٦٧٨٩".indexOf(d));
 const fmt=new Intl.DateTimeFormat("ar-EG",{day:"numeric",month:"short",year:"numeric",hour:"numeric",minute:"2-digit"});
-let all=[],pendingDel=null,channel=null;
+let all=[],pendingDel=null;
 
-/* ---- auth ---- */
-$("login").addEventListener("submit",async e=>{
-  e.preventDefault();$("login-err").hidden=true;
-  const btn=$("login-btn");btn.disabled=true;btn.textContent="جاري الدخول…";
-  const {error}=await sb.auth.signInWithPassword({email:$("email").value.trim(),password:$("pass").value});
-  btn.disabled=false;btn.textContent="دخول";
-  if(error){$("login-err").textContent="الإيميل أو كلمة السر غلط.";$("login-err").hidden=false;}
-});
-$("logout").onclick=()=>sb.auth.signOut();
-sb.auth.onAuthStateChange((_ev,session)=>{session?enter():leave();});
-
-function leave(){
-  $("view-login").hidden=false;$("view-dash").hidden=true;$("logout").hidden=true;
-  all=[];if(channel){sb.removeChannel(channel);channel=null;}
-}
-async function enter(){
-  $("view-login").hidden=true;$("view-dash").hidden=false;$("logout").hidden=false;
-  await load();
-  if(!channel){
-    channel=sb.channel("merchants-live")
-      .on("postgres_changes",{event:"*",schema:"public",table:"merchants"},()=>load())
-      .subscribe();
-  }
-}
-
+const ADMIN_KEY="VgOFgIrhmNPqfcevyXZniZ9Fu4utQJe1"; // نفس المفتاح اللي في setup.sql
 /* ---- data ---- */
 async function load(){
   $("dash-err").hidden=true;
-  const {data,error}=await sb.from("merchants").select("*").order("created_at",{ascending:false}).limit(5000);
-  if(error){$("dash-err").textContent="تعذّر تحميل البيانات. جرّبي تحديث الصفحة.";$("dash-err").hidden=false;return;}
+  const {data,error}=await sb.rpc("ns_list_merchants",{p_key:ADMIN_KEY});
+  if(error){$("dash-err").textContent="تعذّر تحميل البيانات. تأكدي إن setup.sql اتشغّل وإن المفتاح مطابق.";$("dash-err").hidden=false;return;}
   all=data||[];
-  if(!all.length){
-    // signed in but not in admins list → RLS returns nothing
-    const {data:isAdm}=await sb.rpc("is_admin");
-    if(isAdm===false){$("dash-err").textContent="الحساب ده مش مضاف كأدمن. ضيفي الإيميل في جدول admins.";$("dash-err").hidden=false;}
-  }
   render();
 }
 $("refresh").onclick=load;
+load();
+setInterval(()=>{if(!document.hidden&&pendingDel===null)load();},15000); // تحديث تلقائي كل 15 ثانية
+document.addEventListener("visibilitychange",()=>{if(!document.hidden)load();});
 
 function render(){
   const q=toW($("q").value.trim()).toLowerCase(),g=$("fgov").value;
@@ -153,7 +104,7 @@ function render(){
     del.onclick=async()=>{
       if(pendingDel!==r.id){pendingDel=r.id;render();return;}
       pendingDel=null;
-      const {error}=await sb.from("merchants").delete().eq("id",r.id);
+      const {error}=await sb.rpc("ns_delete_merchant",{p_key:ADMIN_KEY,p_id:r.id});
       if(error){$("dash-err").textContent="مقدرناش نحذف التسجيل.";$("dash-err").hidden=false;}
       await load();
     };
