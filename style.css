@@ -1,5 +1,7 @@
 @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&display=swap');
-html,body{margin:0}img{max-width:100%}[hidden]{display:none!important}
+html,body{margin:0;overflow-x:hidden;overscroll-behavior-x:none}
+body{position:relative;touch-action:pan-y pinch-zoom}
+.hp{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);opacity:0;pointer-events:none}img{max-width:100%}[hidden]{display:none!important}
 
 /* Layout: one centered column; logo plate on a woven-thread band, form card below; dashboard is a full-width ledger */
 :root{color-scheme:light;
