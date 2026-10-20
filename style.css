@@ -24,9 +24,11 @@ body{position:relative;touch-action:pan-y pinch-zoom}
 body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:16px;line-height:1.6}
 .wrap{max-width:1080px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
 header.top{border-bottom:1px solid var(--line);background:var(--surface)}
-header.top .wrap{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-block:12px;flex-wrap:wrap}
+header.top .wrap{display:flex;align-items:center;justify-content:space-between;gap:12px;padding-block:12px}
 .logo-plate{background:#fff;border-radius:10px;padding:6px 10px;display:inline-flex}
 .logo-plate img{height:44px;width:auto;display:block}
+.partner{display:flex;align-items:center}
+.partner img{height:30px;width:auto;display:block}
 nav.tabs{display:flex;gap:6px;background:var(--chip);padding:4px;border-radius:999px}
 nav.tabs button{border:0;background:transparent;color:var(--muted);font:600 14px var(--body);padding:8px 16px;border-radius:999px;cursor:pointer}
 nav.tabs button[aria-selected="true"]{background:var(--brown);color:var(--on-brown)}
@@ -102,5 +104,6 @@ td.when{color:var(--muted);font-size:13px;font-variant-numeric:tabular-nums}
   .stats .stat:last-child{grid-column:1/-1}
   form.reg{padding:20px}
   .logo-plate img{height:36px}
+  .partner img{height:22px}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
